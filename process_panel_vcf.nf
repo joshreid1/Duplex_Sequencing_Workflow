@@ -343,6 +343,7 @@ process Check_Simplex_Duplex_VAF {
 		tuple path("*simplex.bam"), path("*simplex.bam.bai"), emit: simplex_bam
 		tuple path("*duplex.bam"),  path("*duplex.bam.bai"),  emit: duplex_bam
 		tuple path("*candidate_variants.vcf.gz", includeInputs:true), path("*candidate_variants.vcf.gz.tbi", includeInputs:true)
+		path("vaf_info.csv")
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
 
 	script:
@@ -362,6 +363,7 @@ process Filter_Variants_VAF {
 		tuple path(simplex_bam), path(simplex_index)
 		tuple path(duplex_bam),  path(duplex_index)
 		tuple path(candidate_variants_gz), path(candidate_variants_tbi)
+		path(vaf_info_csv)
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
 
 	output:
@@ -370,7 +372,7 @@ process Filter_Variants_VAF {
 
 	script:
 	"""
-	Rscript ${projectDir}/pipeline_files/scripts/filter_austin_panel_variants.R ${candidate_variants_gz} vaf_info.csv ${ID}_${GROUP}.RDS ${projectDir}   
+	Rscript ${projectDir}/pipeline_files/scripts/filter_austin_panel_variants.R ${candidate_variants_gz} ${vaf_info_csv} ${ID}_${GROUP}.RDS ${projectDir}   
 	"""
 }
 

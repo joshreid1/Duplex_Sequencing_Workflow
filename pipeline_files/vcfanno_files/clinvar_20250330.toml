@@ -1,0 +1,5 @@
+[[annotation]]
+file = "/vast/projects/reidj-project/clinvar/clinvar_20250330.vcf.gz"
+fields = ["CLNSIG", "CLNSIGCONF", "CLNDN", "GENEINFO"]
+names = ["ClinVarSIG", "ClinVarSIGCONF", "ClinVarDN", "ClinVarGene"]
+ops=["self", "self", "self", "self"]

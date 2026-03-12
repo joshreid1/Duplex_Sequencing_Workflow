@@ -1,0 +1,83 @@
+#SpliceAI Processing
+[[postannotation]]
+fields = ["SpliceAI"]
+op = "lua:spliceai(SpliceAI)"
+type = "String"
+name = "SpliceAI_Processed"
+
+#SpliceAI ALLELE
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[1]"
+type = "String"
+name = "SpliceAI_Allele"
+
+#SpliceAI SYMBOL
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[2]"
+type = "String"
+name = "SpliceAI_Symbol"
+
+#SpliceAI DS_AG
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[3]"
+type = "Float"
+name = "SpliceAI_DS_AG"
+
+#SpliceAI DS_AL
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[4]"
+type = "Float"
+name = "SpliceAI_DS_AL"
+
+#SpliceAI DS_DG
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[5]"
+type = "Float"
+name = "SpliceAI_DS_DG"
+
+#SpliceAI DS_DL
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[6]"
+type = "Float"
+name = "SpliceAI_DS_DL"
+
+#SpliceAI DP_AG
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[7]"
+type = "Float"
+name = "SpliceAI_DP_AG"
+
+#SpliceAI DP_AL
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[8]"
+type = "Float"
+name = "SpliceAI_DP_AL"
+
+#SpliceAI DP_DG
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[9]"
+type = "Float"
+name = "SpliceAI_DP_DG"
+
+#SpliceAI DP_DL
+[[postannotation]]
+fields = ["SpliceAI_Processed"]
+op = "lua:split(SpliceAI_Processed,'|')[10]"
+type = "Float"
+name = "SpliceAI_DP_DL"
+
+#SpliceAI Max
+[[postannotation]]
+fields=["SpliceAI_DS_AG", "SpliceAI_DS_AL", "SpliceAI_DS_DG", "SpliceAI_DS_DL"]
+op="max"
+type="Float"
+name="SpliceAI_Max"

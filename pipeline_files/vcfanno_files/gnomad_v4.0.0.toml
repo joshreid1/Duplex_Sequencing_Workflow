@@ -1,0 +1,5 @@
+[[annotation]]
+file = "/vast/projects/bahlo_epilepsy/gnomAD-lite/v4.0.0/gnomADv4.0.0-lite.vcf.gz"
+fields = ["gnomad_genomes_AC", "gnomad_genomes_nhomalt", "gnomad_exomes_AC", "gnomad_exomes_nhomalt", "gnomad_exomes_AN", "gnomad_genomes_AN"] 
+names = ["AC_gnomad_genomes_4.0", "nhomalt_gnomad_genomes_4.0", "AC_gnomad_exomes_4.0", "nhomalt_gnomad_exomes_4.0", "gnomad_genomes_AN_4.0", "gnomad_genomes_AN_4.0"]
+ops=["self", "self", "self", "self", "self", "self"]

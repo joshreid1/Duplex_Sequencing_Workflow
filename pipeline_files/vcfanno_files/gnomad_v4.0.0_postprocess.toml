@@ -1,0 +1,26 @@
+#gnomAD v4 Processing
+[[postannotation]]
+fields = ["AC_gnomad_exomes_4.0", "AC_gnomad_genomes_4.0"]
+op = "sum"
+type = "Float"
+name = "AC_gnomad_total_4.0"
+
+[[postannotation]]
+fields = ["nhomalt_gnomad_genomes_4.0", "nhomalt_gnomad_exomes_4.0"]
+op = "sum"
+type = "Float"
+name = "nhomalt_gnomad_total_4.0"
+
+
+[[postannotation]]
+fields = ["gnomad_genomes_AN_4.0", "gnomad_genomes_AN_4.0"]
+op = "sum"
+type = "Float"
+name = "gnomad_total_AN_4.0"
+
+
+[[postannotation]]
+fields=["AC_gnomad_total_4.0", "gnomad_total_AN_4.0"]
+op="div2"
+name="AF_gnomad_total_4.0"
+type="Float"

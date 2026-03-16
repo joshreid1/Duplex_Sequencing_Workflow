@@ -6,6 +6,17 @@ params.sample_info			= '/vast/scratch/users/reid.j/duplex_sequencing_workflow/mb
 params.bed_file             = "${projectDir}/pipeline_files/gene_lists/austin_panel_targets.bed"
 params.spliceai_distance    = 500
 
+// Duplex/simplex read support thresholds for filtering somatic variants.
+//   A variant passes if it meets ANY of the three conditions:
+//   1. Strong duplex support alone:         DUPLEX_ALT >= min_duplex
+//   2. Combined duplex + simplex support:   DUPLEX_ALT >= min_duplex_with_simplex & SIMPLEX_ALT >= min_simplex_with_duplex
+//   3. Strong simplex support alone:        SIMPLEX_ALT >= min_simplex
+
+params.min_duplex              = 2
+params.min_simplex             = 3
+params.min_duplex_with_simplex = 1
+params.min_simplex_with_duplex = 2
+
 // vcfanno toml files
 params.clinvar_toml         		= "${projectDir}/pipeline_files/vcfanno_files/clinvar_20250330.toml"
 params.cosmic_toml          		= "${projectDir}/pipeline_files/vcfanno_files/cosmic_20251203.toml"
@@ -16,7 +27,11 @@ params.spliceai_postprocess_toml 	= "${projectDir}/pipeline_files/vcfanno_files/
 
 params.ref_fasta			= '/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/reference/fasta/Homo_sapiens_assembly38.fasta'
 params.mosdepth				= '/stornext/Bioinf/data/lab_bahlo/software/apps/mosdepth/mosdepth_v0.3.8' 
-params.vep_cache_dir 		= "/stornext/Bioinf/data/lab_bahlo/ref_db/vep-cache/"
+
+// vep files
+params.vep_cache_dir		= "/vast/projects/bahlo_cache/vep_cache/"
+params.vep_alphamissense 	= '/vast/projects/bahlo_cache/annotation/alphamissense/AlphaMissense_hg38.tsv.gz'
+params.vep_revel			= '/vast/projects/bahlo_cache/annotation/REVEL/revel_1.3.hg38.vep.tsv.gz'
 
 // Import modules
 //include { SpliceAI_Run } from '/stornext/Bioinf/data/lab_bahlo/users/reid.j/Splice_Pipeline/modules.nf'
@@ -71,9 +86,9 @@ process Pre_Filter_Variants {
 }
 
 process VEP {
-	module 'ensembl-vep/112'
+    container = 'quay.io/biocontainers/ensembl-vep:115.2--pl5321h2a3209d_1'
 
-	tag "${ID} ${GROUP}"
+    tag "${ID} ${GROUP}"
 
 	cpus = 1
 	memory = { 1 * task.attempt + ' GB' }
@@ -85,14 +100,16 @@ process VEP {
 	output:
 		path ('vep.vcf')
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
-			
-	script:
+
+    script:
 	"""
-	vep --cache --dir ${params.vep_cache_dir} --cache_version 104 --assembly GRCh38 \
+	vep --cache --dir ${params.vep_cache_dir} --cache_version 115 --assembly GRCh38 \
 			-i ${vcf} -o vep.vcf --format vcf --vcf --symbol --terms SO --tsl --hgvs \
 			--fasta ${params.ref_fasta} --offline --sift b --polyphen b --ccds --hgvs --hgvsg --symbol \
-			--numbers --protein --af --af_1kg --max_af --variant_class --pick_allele_gene --force_overwrite
-	"""
+			--numbers --protein --variant_class --pick_allele_gene --force_overwrite \
+			--plugin AlphaMissense,file=${params.vep_alphamissense},transcript_match=1 \
+			--plugin REVEL,file=${params.vep_revel}
+    """
 }
 
 process CADD_Run_Container {
@@ -102,8 +119,7 @@ process CADD_Run_Container {
 	memory = { 10 * task.attempt + ' GB' }
 	time = { 1 * task.attempt + ' h'}
 
-	container '/vast/projects/reidj-project/containers/cadd-scoring_latest.sif'
-	//container 'community.wave.seqera.io/library/cadd-scripts:1.7.3--e283e32d163015db'
+	container 'oras://docker.io/joshreid1/cadd-scoring:v1.6_edit'
 
 	containerOptions '-B /stornext/Bioinf/data/lab_bahlo/users/reid.j/cadd/CADD-scripts-master/data/annotations:/CADD-scripts/data/annotations --writable-tmpfs'
 		
@@ -216,7 +232,8 @@ process SpliceAI_Run {
 	memory = { 16 * task.attempt + ' GB' }
 	time = { 2 * task.attempt + ' h'}
 
-	container '/stornext/Bioinf/data/lab_bahlo/users/reid.j/analysis/Apptainer/spliceai.img'
+	container 'community.wave.seqera.io/library/python_pip_keras_setuptools_pruned:1c71801b2a7b49db'
+
 
 	input:
 		tuple path(vcf), path(vcf_index)
@@ -254,7 +271,8 @@ process Process_SpliceAI {
 
 	script:
 	""" 
-	vcfanno -lua ${params.spliceai_lua} ${params.spliceai_postprocess_toml} ${vcf} > ${ID}_${GROUP}_processed_spliceai.vcf
+	vcfanno -lua ${params.spliceai_lua} ${params.spliceai_postprocess_toml} ${vcf} \
+		> ${ID}_${GROUP}_processed_spliceai.vcf
 	"""
 }
 
@@ -264,7 +282,7 @@ process Filter_Variants_Vembrane {
     
     label 'vembrane'
 
-    container 'quay.io/biocontainers/vembrane:1.0.7--pyhdfd78af_0'
+    container 'quay.io/biocontainers/vembrane:2.5.0--pyhdfd78af_0'
     
     publishDir "filtered_variants", mode: 'copy'
     
@@ -282,16 +300,17 @@ process Filter_Variants_Vembrane {
 	# Vembrane filter logic:
 	# INCLUDES variants that are NOT benign/likely benign in ClinVar AND meet at least ONE of:
 	#   a) High-impact consequence (stop gain/loss, start loss, frameshift, inframe indels)
-	#   b) Pathogenic/likely pathogenic in ClinVar
-	#   c) CADD score >20
-	#   d) SpliceAI score >0.8
-	# TO ADD: Revel > 0.6
+	#   b) Pathogenic/Likely pathogenic in ClinVar
+	#   c) CADD score > 20
+	#   d) SpliceAI score > 0.8
+	#   e) REVEL score > 0.6
 
 	cat > vembrane_expr.txt <<'EXPR'
-(not "benign" in str(INFO.get("ClinVarSIG", "")).lower() and not "benign" in str(INFO.get("ClinVarSIGCONF", "")).lower() and (any(any(cons in ann.split("|")[1] for cons in ["stop_gained", "stop_lost", "start_lost", "frameshift_variant", "inframe_insertion", "inframe_deletion", "protein_altering_variant"]) for ann in INFO.get("CSQ", [])) or "pathogenic" in str(INFO.get("ClinVarSIG", "")).lower() or ((INFO.get("CADD_Score") or 0) > 20) or (any(max([float(s) if s and s != "." else 0 for s in spliceai.split("|")[2:6]]) > 0.8 for spliceai in INFO.get("SpliceAI", []) if len(spliceai.split("|")) > 5))))
+(not "benign" in str(INFO.get("ClinVarSIG", "")).lower() and not "benign" in str(INFO.get("ClinVarSIGCONF", "")).lower() and (any(any(cons in ann.split("|")[1] for cons in ["stop_gained", "stop_lost", "start_lost", "frameshift_variant", "inframe_insertion", "inframe_deletion", "protein_altering_variant"]) for ann in INFO.get("CSQ", [])) or "pathogenic" in str(INFO.get("ClinVarSIG", "")).lower() or ((INFO.get("CADD_Score") or 0) > 20) or (any(max([float(s) if s and s != "." else 0 for s in spliceai.split("|")[2:6]]) > 0.8 for spliceai in INFO.get("SpliceAI", []) if len(spliceai.split("|")) > 5)) or any(float(str(ANN["REVEL"])) > 0.6 for _ in [1] if str(ANN["REVEL"]) not in ("", ".", "NoValue()"))))
 EXPR
 
     vembrane filter \
+		--annotation-key CSQ \
         --overwrite-number-info "COSMIC_Sample_Count=." \
         --output ${ID}_candidate_variants.vcf \
         "\$(cat vembrane_expr.txt)" \
@@ -372,7 +391,10 @@ process Filter_Variants_VAF {
 
 	script:
 	"""
-	Rscript ${projectDir}/pipeline_files/scripts/filter_austin_panel_variants.R ${candidate_variants_gz} ${vaf_info_csv} ${ID}_${GROUP}.RDS ${projectDir}   
+	Rscript ${projectDir}/pipeline_files/scripts/filter_austin_panel_variants.R \
+		${candidate_variants_gz} ${vaf_info_csv} ${ID}_${GROUP}.RDS ${projectDir} \
+		${params.min_duplex} ${params.min_simplex} \
+		${params.min_duplex_with_simplex} ${params.min_simplex_with_duplex}
 	"""
 }
 

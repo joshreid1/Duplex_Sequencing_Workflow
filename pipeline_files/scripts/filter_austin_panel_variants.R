@@ -12,14 +12,20 @@ suppressPackageStartupMessages({
 
 # Check and collect command line arguments
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 4) {
-  stop("Usage: Rscript filter_austin_panel_variants.R <vcf> <vaf_csv> <output_rds> <project_dir>")
+if (length(args) < 8) {
+  stop("Usage: Rscript filter_austin_panel_variants.R <vcf> <vaf_csv> <output_rds> <project_dir> \
+       <min_duplex> <min_simplex> <min_duplex_with_simplex> <min_simplex_with_duplex>")
 }
 
-vcf_file     <- args[1]
-variant_file <- args[2]
-output_rds   <- args[3]
-project_dir  <- args[4]
+vcf_file                <- args[1]
+variant_file            <- args[2]
+output_rds              <- args[3]
+project_dir             <- args[4]
+min_duplex              <- as.integer(args[5])
+min_simplex             <- as.integer(args[6])
+min_duplex_with_simplex <- as.integer(args[7])
+min_simplex_with_duplex <- as.integer(args[8])
+
 
 # Use project_dir to build paths to gene lists
 ras <- read.table(file.path(project_dir, "pipeline_files/gene_lists/20240923_ras_pathway_genes_namesonly.tsv"),
@@ -326,6 +332,10 @@ vcf_info$SpliceAI_DS_DG <- as.numeric(vcf_info$SpliceAI_DS_DG)
 vcf_info$SpliceAI_DS_DL <- as.numeric(vcf_info$SpliceAI_DS_DL)
 vcf_info$SpliceAI_Max <- as.numeric(vcf_info$SpliceAI_Max)
 
+#AlphaMissense
+colnames(vcf_info)[colnames(vcf_info) == "am_class"] <- "AlphaMissense_Class"
+colnames(vcf_info)[colnames(vcf_info) == "am_pathogenicity"] <- "AlphaMissense_Score"
+
 # Match VCF genes with Epilepsy Gene List genes
 matches <- match(vcf_info$SYMBOL, gene_info$Gene)
 
@@ -361,7 +371,8 @@ vcf_info <- vcf_info %>%
   dplyr::select(
     CHR, POS, REF, ALT, Variant, Consequence, IMPACT, SYMBOL, Gene, Feature, 
     BIOTYPE, EXON, INTRON, HGVSc, HGVSp, HGVSg, Existing_variation, DISTANCE, 
-    FLAGS, VARIANT_CLASS, CADD_Score, SIFT, PolyPhen, SpliceAI_DS_AG, SpliceAI_DS_AL, SpliceAI_DS_DG, SpliceAI_DS_DL, SpliceAI_Max,
+    FLAGS, VARIANT_CLASS, CADD_Score, SIFT, AlphaMissense_Class, AlphaMissense_Score, REVEL,
+    PolyPhen, SpliceAI_DS_AG, SpliceAI_DS_AL, SpliceAI_DS_DG, SpliceAI_DS_DL, SpliceAI_Max,
     ClinVarSIG, ClinVarSIGCONF, ClinVarGene, ClinVarDN, 
     AC_gnomad_exomes_4.0, AC_gnomad_genomes_4.0, AC_gnomad_total_4.0, 
     nhomalt_gnomad_exomes_4.0, nhomalt_gnomad_genomes_4.0, nhomalt_gnomad_total_4.0, COSMIC_Sample_Count, 
@@ -371,7 +382,11 @@ vcf_info <- vcf_info %>%
 
 # Filter vcf_info based on duplex/simplex coverage
 vcf_info <- vcf_info %>%
-  filter(DUPLEX_ALT >= 2 | (DUPLEX_ALT >= 1 & SIMPLEX_ALT >= 2) | SIMPLEX_ALT >= 3)
+  filter(
+    DUPLEX_ALT >= min_duplex |
+    SIMPLEX_ALT >= min_simplex |
+    (DUPLEX_ALT >= min_duplex_with_simplex & SIMPLEX_ALT >= min_simplex_with_duplex)
+  )
 
 # Save the processed data frame as an RDS file
 saveRDS(vcf_info, file = output_rds)

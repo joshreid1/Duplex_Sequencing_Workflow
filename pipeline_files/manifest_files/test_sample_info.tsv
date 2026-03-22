@@ -1,0 +1,4 @@
+Group	Sample_ID	VCF_Filepath	BAM_Filepath
+MTLE	38961-1	/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/cohorts/austin_panel/2025-10-15_Merge_Dragen/38961-1-EST007-EST026_ds.406c0f96da4c4edd8a836418fef60e40/38961-1-EST007-EST026.hard-filtered.vcf.gz	/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/cohorts/austin_panel/2025-10-15_Merge_Dragen/38961-1-EST007-EST026_ds.406c0f96da4c4edd8a836418fef60e40/38961-1-EST007-EST026.bam
+MND	37497-6	/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/cohorts/austin_panel/EST017/EST017_Dragen/37497-6/37497-6.hard-filtered.vcf.gz	/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/cohorts/austin_panel/EST017/EST017_Dragen/37497-6/37497-6.bam
+CONTROL	51148-2	/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/cohorts/austin_panel/MBC002/Dragen/51148-2/51148-2.hard-filtered.vcf.gz	/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/cohorts/austin_panel/MBC002/Dragen/51148-2/51148-2.bam

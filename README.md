@@ -5,7 +5,7 @@
 This repository describes the sequencing workflow and downstream processing 
 for the **Austin Pathology high‑depth duplex panel**. 
 Data is received from Austin Pathology and stored in the Mediaflux project 
-`proj‑5430_epilepsy_ont/data/austin_panel_data`.
+`/projects/proj-5430_epilepsy_ont-1128.4.765/data/austin_panel_data`.
 
 ## Library preparation & sequencing
 
@@ -30,25 +30,25 @@ Source: <https://pmc.ncbi.nlm.nih.gov/articles/PMC12668077/#:~:text=High%2DDepth
 ## Data Flow
 
 1. Receive hard‑drive from Austin Pathology (Wendi Lin/Gabi Bradshaw) containing:
-   - FASTQ files
+   - FASTQ files (currently for storage only, as DRAGEN alignment is performed at Austin Pathology)
    - DRAGEN‑processed files (VCFs, BAMs, QC reports, etc.)
 
 2. Transfer data to Mediaflux:
    ```sh
-   proj-5430_epilepsy_ont/data/austin_panel_data
+   /projects/proj-5430_epilepsy_ont-1128.4.765/data/austin_panel_data
    ```
-   Several access protocols are available – see
-   <https://rcs-knowledge-hub.atlassian.net/wiki/spaces/KB/pages/5474178/Choosing+the+right+access+protocol+for+you>.
+   Several access protocols are available – see  
+   <https://github.com/joshreid1/Mediaflux_Tips>
 
 # Variant Annotation & Filtering Pipeline
 
-A Nextflow pipeline for annotating, filtering, and prioritising germline/somatic variants. 
+A Nextflow pipeline for annotating, filtering, and prioritising germline & somatic variants. 
 
 ---
 
 ## Overview
 
-This pipeline takes per-sample VCF and BAM files as input and performs variant annotation followed by tiered filtering to produce a prioritised candidate variant report. Coverage across target regions is also assessed.
+This pipeline takes per-sample VCF and BAM files as input and performs variant annotation followed by tiered filtering to produce a prioritised candidate variant report. Depth of coverage across target regions is also assessed.
 
 ```
 Input TSV (sample_info)
@@ -72,10 +72,10 @@ Input TSV (sample_info)
        │
   VAF check (simplex and duplex) 
        │
-  Excel report
+  Excel output
 ```
 
-Coverage (mosdepth/custom) runs independently on all samples in parallel.
+Depth of coverage across panel regions (custom pysam script) also run on all samples.
 
 ---
 
@@ -84,15 +84,6 @@ Coverage (mosdepth/custom) runs independently on all samples in parallel.
 - [Nextflow](https://www.nextflow.io/) ≥ 22.0
 - [Singularity/Apptainer](https://apptainer.org/) (for containerised processes)
 - HPC cluster with SLURM (or compatible scheduler)
-- Access to the following tools (module or container):
-  - `bcftools` ≥ 1.20
-  - `ensembl-vep` 112
-  - `vcfanno`
-  - `fastp`
-  - `mosdepth`
-  - `vembrane` 1.0.7
-  - `pysam` 0.23.3
-  - R (with relevant packages)
 
 ---
 
@@ -102,7 +93,7 @@ The pipeline requires a **tab-separated sample sheet** with the following column
 
 | Column | Description |
 |---|---|
-| `Group` | Sample group/cohort identifier |
+| `Group` | Sample group/cohort identifier (e.g. "MTLE", "MND" or "Control") |
 | `Sample_ID` | Unique sample identifier |
 | `VCF_Filepath` | Absolute path to the input VCF |
 | `BAM_Filepath` | Absolute path to the aligned BAM file |
@@ -135,7 +126,7 @@ Filters variants using `bcftools` to retain only:
 - Variants with gnomAD total AF < 0.1% (`AF_gnomad_total_4.0 > 0.001` excluded)
 
 ### 3. `VEP`
-Runs [Ensembl VEP](https://www.ensembl.org/vep) (v112, GRCh38) in offline mode to annotate functional consequences, HGVS notation, SIFT/PolyPhen scores, allele frequencies, variant class, and canonical transcript selection (`--pick_allele_gene`).
+Runs [Ensembl VEP](https://www.ensembl.org/vep) (v115.2, GRCh38) in offline mode to annotate functional consequences (SO terms), HGVS notation, scores (SIFT, PolyPhen, AlphaMissense, REVEL), allele frequencies, variant class, and canonical transcript selection via --pick_allele_gene.
 
 ### 4. `CADD_Run_Container`
 Scores variant deleteriousness using [CADD](https://cadd.gs.washington.edu/) inside a Singularity container. Variants where all ALT alleles are `*` (spanning deletions) are skipped.
@@ -160,7 +151,8 @@ Applies compound Python-expression filtering using [`vembrane`](https://github.c
 - High-impact consequence: `stop_gained`, `stop_lost`, `start_lost`, `frameshift_variant`, `inframe_insertion`, `inframe_deletion`, or `protein_altering_variant`
 - ClinVar significance contains "pathogenic"
 - CADD score > 20
-- SpliceAI max delta score > 0.8
+- SpliceAI max delta score > 0.5
+- REVEL score > 0.6
 
 ### 11. `Compress_Index`
 Compresses filtered VCF with `bgzip` and indexes with `tabix`.
@@ -180,7 +172,7 @@ Parses an annotated VCF and `vaf_info.csv`, integrates all annotation layers, an
 Collects all per-sample `.RDS` files and generates a consolidated Excel report (`.xlsx`) via an R script.
 
 ### 15. `Check_Coverage` *(parallel)*
-Runs independently on the input BAM for each sample using `mosdepth` (via a wrapper Python script) to compute per-base coverage over the target BED regions. Results are published to `mosdepth_results/`.
+Runs independently on the input BAM for each sample using (via a Python script) to compute per-base coverage over the target BED regions. Results are published to `coverage_data`.
 
 ---
 
@@ -190,14 +182,7 @@ Runs independently on the input BAM for each sample using `mosdepth` (via a wrap
 |---|---|
 | `filtered_variants/` | Per-sample candidate variant VCFs |
 | `updated_results/` | Per-sample BAM/BAI files + final `filtered_variants.xlsx` report |
-| `mosdepth_results/` | Per-sample per-base coverage BED files |
-
----
-
-## Utility Processes (not in main workflow)
-
-- **`Join_VCF`** — Merges multiple VCFs using `SnpSift` and sorts/compresses with `bcftools`. Handles single or multi-file input.
-- **`Split_Vcf`** — Splits a VCF into chunks for parallelisation, scaling chunk size based on total variant count (using `SnpSift split`).
+| `coverage_data/` | Per-sample per-base coverage BED files |
 
 ---
 
@@ -210,13 +195,21 @@ nextflow run main.nf \
   -resume
 ```
 
+### Test data:
+
+```bash
+nextflow run main.nf \
+     --sample_info pipeline_files/manifest_files/test_sample_info.tsv \
+     -profile singularity \
+     -resume
+```
+
 ---
 
 ## Notes
 
 - All processes use dynamic memory/time retry scaling (`task.attempt`).
 - Containerised processes (CADD, SpliceAI, Vembrane) use Singularity images.
-- The `SpliceAI_Run` import from a shared module file is available but currently commented out in favour of the inline process definition.
 
 
 ## Notes
@@ -233,11 +226,11 @@ nextflow run main.nf \
   alignment/variant calling to maximise depth.
 - This initially requires UMIs to be parsed and extracted into read-names via 
 `process_fastq_umi_for_merging.sh`
-- Samples can then be concatenated together and returned to Austin Path for DRAGEN processing i.e.
-`cat Sample1_Batch1_R1.fastq.gz Sample1_Batch2_R1_fastq.gz > Sample1_Batch1_Batch2_R1.fastq.gz`
+- Samples can then be concatenated together and returned to Austin Path for DRAGEN processing i.e.  
+`cat Sample1_Batch1_R1.fastq.gz Sample1_Batch2_R1_fastq.gz > Sample1_Batch1_Batch2_R1.fastq.gz`  
 `cat Sample1_Batch1_R2.fastq.gz Sample1_Batch2_R2_fastq.gz > Sample1_Batch1_Batch2_R2.fastq.gz`
 
-
+---
 
 ### Duplex sequencing explanation
 
@@ -257,34 +250,7 @@ Illumina tech support explanation of XV/XW:
 > larger than XV.  If consensus is simplex, then there's no duplex
 > pair, so XW will be 0."
 
-
-## Mediaflux data recovery
-
-In case of emergency, use the Mediaflux disaster‑recovery process.
-
-Data in the Mediaflux project is replicated to a geographically
-separate DR server. Replication usually completes within a few hours,
-but may be delayed by maintenance. If a file is deleted prior to
-replication, recovery is not possible.
-
-To request a restore:
-
-- Submit a ServiceHub request.
-- Include the full path of the data needing recovery.
-
-UoM staff can use: <https://go.unimelb.edu.au/tu78>
-
-
-## Environment setup
-
-Make sure the following tools/binaries are on your `PATH`:
-
-```sh
-vcfanno
-bcftools
-bgzip
-tabix
-```
+---
 
 ## Data resources
 
@@ -299,6 +265,6 @@ tabix
 
 ## TODO
 
-- [ ] Document downstream pipeline steps after manifest creation
+- [ ] 
 
 ---

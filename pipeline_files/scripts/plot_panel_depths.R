@@ -4,7 +4,7 @@ library(ggplot2)
 library(tidyr)
 
 # Define the directories containing the files
-consensus_dir <- "/vast/scratch/users/reid.j/austin_panel/nextflow_run/mosdepth_results"
+consensus_dir <- "/vast/scratch/users/reid.j/austin_panel/nextflow_run/coverage_data"
 raw_dir <- ""
 
 # List all files in the directories matching the pattern

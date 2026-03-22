@@ -751,7 +751,7 @@ library(readr)
 library(stringr)
 
 # Define the directory path
-dir_path <- "/vast/scratch/users/reid.j/austin_panel/December_Download/nf_run/mosdepth_results_v2/"
+dir_path <- "/vast/scratch/users/reid.j/austin_panel/December_Download/nf_run/coverage_data/"
 
 # Get the list of bed files
 bed_files <- list.files(dir_path, pattern = "\\.per-base\\.bed$", full.names = TRUE)

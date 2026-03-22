@@ -4,6 +4,7 @@ nextflow.enable.dsl=2
 // Input parameters
 params.sample_info			= '/vast/scratch/users/reid.j/duplex_sequencing_workflow/mbc002_ids_plus_vcfpath_plus_bam.tsv'
 params.bed_file             = "${projectDir}/pipeline_files/gene_lists/austin_panel_targets.bed"
+params.ref_fasta			= '/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/reference/fasta/Homo_sapiens_assembly38.fasta'
 params.spliceai_distance    = 500
 
 // Duplex/simplex read support thresholds for filtering somatic variants.
@@ -25,16 +26,11 @@ params.gnomad_postprocess_toml 		= "${projectDir}/pipeline_files/vcfanno_files/g
 params.spliceai_lua					= "${projectDir}/pipeline_files/vcfanno_files/spliceai.lua"
 params.spliceai_postprocess_toml 	= "${projectDir}/pipeline_files/vcfanno_files/spliceai_postprocess.toml"
 
-params.ref_fasta			= '/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/reference/fasta/Homo_sapiens_assembly38.fasta'
-params.mosdepth				= '/stornext/Bioinf/data/lab_bahlo/software/apps/mosdepth/mosdepth_v0.3.8' 
 
 // vep files
 params.vep_cache_dir		= "/vast/projects/bahlo_cache/vep_cache/"
 params.vep_alphamissense 	= '/vast/projects/bahlo_cache/annotation/alphamissense/AlphaMissense_hg38.tsv.gz'
 params.vep_revel			= '/vast/projects/bahlo_cache/annotation/REVEL/revel_1.3.hg38.vep.tsv.gz'
-
-// Import modules
-//include { SpliceAI_Run } from '/stornext/Bioinf/data/lab_bahlo/users/reid.j/Splice_Pipeline/modules.nf'
 
 process gnomad {
 
@@ -302,11 +298,11 @@ process Filter_Variants_Vembrane {
 	#   a) High-impact consequence (stop gain/loss, start loss, frameshift, inframe indels)
 	#   b) Pathogenic/Likely pathogenic in ClinVar
 	#   c) CADD score > 20
-	#   d) SpliceAI score > 0.8
+	#   d) SpliceAI score > 0.5
 	#   e) REVEL score > 0.6
 
 	cat > vembrane_expr.txt <<'EXPR'
-(not "benign" in str(INFO.get("ClinVarSIG", "")).lower() and not "benign" in str(INFO.get("ClinVarSIGCONF", "")).lower() and (any(any(cons in ann.split("|")[1] for cons in ["stop_gained", "stop_lost", "start_lost", "frameshift_variant", "inframe_insertion", "inframe_deletion", "protein_altering_variant"]) for ann in INFO.get("CSQ", [])) or "pathogenic" in str(INFO.get("ClinVarSIG", "")).lower() or ((INFO.get("CADD_Score") or 0) > 20) or (any(max([float(s) if s and s != "." else 0 for s in spliceai.split("|")[2:6]]) > 0.8 for spliceai in INFO.get("SpliceAI", []) if len(spliceai.split("|")) > 5)) or any(float(str(ANN["REVEL"])) > 0.6 for _ in [1] if str(ANN["REVEL"]) not in ("", ".", "NoValue()"))))
+(not "benign" in str(INFO.get("ClinVarSIG", "")).lower() and not "benign" in str(INFO.get("ClinVarSIGCONF", "")).lower() and (any(any(cons in ann.split("|")[1] for cons in ["stop_gained", "stop_lost", "start_lost", "frameshift_variant", "inframe_insertion", "inframe_deletion", "protein_altering_variant"]) for ann in INFO.get("CSQ", [])) or "pathogenic" in str(INFO.get("ClinVarSIG", "")).lower() or ((INFO.get("CADD_Score") or 0) > 20) or (any(max([float(s) if s and s != "." else 0 for s in spliceai.split("|")[2:6]]) > 0.5 for spliceai in INFO.get("SpliceAI", []) if len(spliceai.split("|")) > 5)) or any(float(str(ANN["REVEL"])) > 0.6 for _ in [1] if str(ANN["REVEL"]) not in ("", ".", "NoValue()"))))
 EXPR
 
     vembrane filter \
@@ -419,7 +415,7 @@ process Check_Coverage {
 	cpus = 2
 	memory = '4 GB'
 
-	publishDir 'mosdepth_results', mode: 'copy', pattern: "*.bed"
+	publishDir 'coverage_data', mode: 'copy', pattern: "*.bed"
 
 	input: tuple val(GROUP), val(ID), val(VCF), val(BAM)
 
@@ -466,68 +462,4 @@ workflow {
 
 	// Pass the collected RDS files to Generate_Report
 	Generate_Report(all_rds_files)
-}
-
-
-/////
-
-process Join_VCF {
-	cpus = 2
-	memory = { 10 * task.attempt + ' GB' }
-	time = { 2 * task.attempt + ' h'}
-
-	module 'bcftools/1.20:htslib'
-
-	input:
-		path('vcf', arity: '1..*')
-
-	output:
-		tuple path("*.gz"), path("*.tbi")
-
-	shell:
-	'''
-	if [ $(ls vcf* 2>/dev/null | wc -l) -gt 1 ]; then
-		snpsift split -j vcf* | bcftools sort --temp-dir ./ -Oz -o final.vcf.gz --write-index=tbi
-	else
-		bcftools sort --temp-dir ./ -Oz -o final.vcf.gz --write-index=tbi vcf*
-	fi
-	'''	
-}
-
-process Split_Vcf {
-	label 'C1M1T1'
-	
-	input:
-		path(vcf) 
-
-	output:
-		path("merged.*.vcf")
-
-	shell:
-	'''
-	variant_number=`expr $(zgrep -v "^#" !{vcf} | wc -l)`
-	
-	if [ $variant_number -gt 1000 ]
-	then
-		task_number=500
-	elif [ $variant_number -gt 10 ]
-	then
-		task_number=10
-	else
-		task_number=2
-	fi
-	
-	split_number=`expr $variant_number / $task_number`
-
-	split_number=`expr $variant_number / $task_number`
-	if [ $split_number -lt 5 ]; then
-		split_number=5
-	fi
-
-	echo "Variant number = $variant_number" >> error_check.txt
-	echo "Number of tasks = $task_number" >> error_check.txt
-	echo "Number of variants per split = $split_number" >> error_check.txt
-
-	snpsift split -l $split_number !{vcf} 
-	'''
 }

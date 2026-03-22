@@ -431,14 +431,12 @@ process Check_Coverage {
 }
 
 workflow {
-	// Create a channel from the sample info file
-	Channel
-		.fromPath(params.sample_info)
-		.splitCsv(header: true, sep: "\t")
-		.map { row -> [row.Group, row.Sample_ID, row.VCF_Filepath, row.BAM_Filepath] }
-		.view()
-		.set { sampleChannel }
-
+    Channel
+        .fromPath(params.sample_info)
+        .splitCsv(header: true, sep: "\t")
+        .map { row -> [row.Group, row.Sample_ID, row.VCF_Filepath, row.BAM_Filepath] }
+        .view { "${it[0]}: ${it[1]}" }
+        .set { sampleChannel }
 
 	// Process the sample channel
 	gnomad(sampleChannel)

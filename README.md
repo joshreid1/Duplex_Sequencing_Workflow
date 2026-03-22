@@ -189,18 +189,16 @@ Runs independently on the input BAM for each sample using (via a Python script) 
 ## Usage
 
 ```bash
-nextflow run main.nf \
+nextflow run process_panel_vcf.nf \
   --sample_info /path/to/samples.tsv \
-  -profile singularity \
   -resume
 ```
 
 ### Test data:
 
 ```bash
-nextflow run main.nf \
+nextflow run process_panel_vcf.nf \
      --sample_info pipeline_files/manifest_files/test_sample_info.tsv \
-     -profile singularity \
      -resume
 ```
 
@@ -256,15 +254,20 @@ Illumina tech support explanation of XV/XW:
 
 - `/vast/projects/reidj-project/cosmic/Cosmic_GenomeScreensMutant_v102_GRCh38.vcf.gz`
 - `/vast/projects/reidj-project/clinvar/clinvar_20250330.vcf.gz`
-- Singularity/Apptainer containers:
-  - `/vast/projects/reidj-project/containers/cadd-scoring_latest.sif`
-  - `/stornext/Bioinf/data/lab_bahlo/users/reid.j/analysis/Apptainer/spliceai.img`
+
 - External annotations:
   - `/stornext/Bioinf/data/lab_bahlo/users/reid.j/cadd/CADD-scripts-master/data/annotations`
   - `/stornext/Bioinf/data/lab_bahlo/users/reid.j/spliceai/gencode.v43.canonical.annotation.txt`
 
 ## TODO
 
-- [ ] 
+- [ ] Move CADD annotation files (208 GB) to a shared location. 
+(currently at /stornext/Bioinf/data/lab_bahlo/users/reid.j/cadd/CADD-scripts-master/data/annotations)
+
+- [ ] Move SpliceAI annotation files (GENCODE v43 canonical) to a shared location.
+(currently at /stornext/Bioinf/data/lab_bahlo/users/reid.j/spliceai/gencode.v43.canonical.annotation.txt)
+
+- `/vast/projects/reidj-project/cosmic/Cosmic_GenomeScreensMutant_v102_GRCh38.vcf.gz`
+- `/vast/projects/reidj-project/clinvar/clinvar_20250330.vcf.gz`
 
 ---

@@ -246,7 +246,7 @@ process SpliceAI_Run {
 	-O ${ID}_${GROUP}.spliceai.vcf \
 	-R ${params.ref_fasta} \
 	-D ${params.spliceai_distance} \
-	-A /stornext/Bioinf/data/lab_bahlo/users/reid.j/spliceai/gencode.v43.canonical.annotation.txt
+	-A /vast/projects/bahlo_epilepsy/somatic_annotation_data/SpliceAI/gencode.v43.canonical.annotation.txt
 	"""
 }
 

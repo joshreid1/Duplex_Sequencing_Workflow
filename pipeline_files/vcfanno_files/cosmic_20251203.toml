@@ -1,5 +1,5 @@
 [[annotation]]
-file = "/vast/projects/reidj-project/cosmic/Cosmic_GenomeScreensMutant_v102_GRCh38.vcf.gz"
+file = "/vast/projects/bahlo_epilepsy/somatic_annotation_data/COSMIC/Cosmic_GenomeScreensMutant_v102_GRCh38.vcf.gz"
 fields = ["GENOME_SCREEN_SAMPLE_COUNT"]
 names = ["COSMIC_Sample_Count"]
 ops=["max"]

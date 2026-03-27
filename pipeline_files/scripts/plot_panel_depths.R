@@ -3,39 +3,37 @@ library(dplyr)
 library(ggplot2)
 library(tidyr)
 
-# Define the directories containing the files
-consensus_dir <- "/vast/scratch/users/reid.j/austin_panel/nextflow_run/coverage_data"
-raw_dir <- ""
+# Get the directory from command line arguments
+args <- commandArgs(trailingOnly = TRUE)
+consensus_dir <- args[1]
 
-# List all files in the directories matching the pattern
+# List all files in the directory matching the pattern
 file_pattern <- "\\.gene-list\\.per-base\\.bed$"
 consensus_files <- list.files(consensus_dir, pattern = file_pattern, full.names = TRUE)
-raw_files <- list.files(raw_dir, pattern = file_pattern, full.names = TRUE)
 
-# Helper function to read and format a file, including the Processing variable
-read_and_format <- function(file_path, processing_type) {
-  # Extract sample ID, repeat type, and version
+# Helper function to read and format a file
+read_and_format <- function(file_path) {
+  # Extract sample ID and batch ID from filename
   file_name <- basename(file_path)
   sample_id <- strsplit(file_name, "\\.")[[1]][1]
   batch_id <- strsplit(file_name, "\\.")[[1]][2]
-  repeat_type <- sub(".*\\.(FRESH|FFPE)\\..*", "\\1", file_name) # Extract repeat type (FRESH or FFPE)
   
   # Read the data
   df <- read.table(file_path, sep = "\t", header = FALSE, 
                    col.names = c("CHROM", "POS", "COVERAGE"))
   
-  # Add sample ID, repeat type, and processing type columns
+  # Add sample ID and batch ID columns
   df <- df %>%
-    mutate(Sample_ID = sample_id, Batch_ID = batch_id, Repeat = repeat_type, Processing = processing_type)
+    mutate(Sample_ID = sample_id, Batch_ID = batch_id)
   
   return(df)
 }
 
 # Read and combine data from consensus directory
-consensus_df <- bind_rows(lapply(consensus_files, read_and_format, "Consensus"))
+consensus_df <- bind_rows(lapply(consensus_files, read_and_format))
 
 summary_df <- consensus_df %>%
-  group_by(Sample_ID, Batch_ID, Repeat, Processing) %>%
+  group_by(Sample_ID, Batch_ID) %>%
   summarise(
     coverage_mean = mean(COVERAGE, na.rm = TRUE),
     coverage_median = median(COVERAGE, na.rm = TRUE),
@@ -56,45 +54,11 @@ median(summary_df$coverage_median)
 write.table(summary_df, file = "coverage_summary.tsv", 
             sep = "\t", quote = FALSE, row.names = FALSE)
 
+plot_df <- consensus_df
 
-# Check if raw files exist and if not, only use consensus data
-if (length(raw_files) > 0) {
-  raw_df <- bind_rows(lapply(raw_files, read_and_format, "Raw"))
-  combined_df <- bind_rows(consensus_df, raw_df)
-} else {
-  combined_df <- consensus_df
-}
-
-combined_df$Repeat <- 'Fresh'
-
-# Ensure the Repeat column has the correct order
-combined_df <- combined_df %>%
-  mutate(Repeat = factor(Repeat, levels = c("Fresh", "FFPE", "FFPE-AustinPath")))
-
-#combined_df[combined_df$Sample_ID == "HORIZON", "Repeat"] = "FFPE-AustinPath"
-#combined_df[combined_df$Sample_ID == "M23017", "Repeat"] = "FFPE-AustinPath"
-
-plot_df <- combined_df
-
-# Filter for the specific sample IDs
-#plot_df <- combined_df %>%
-#  filter(Sample_ID %in% c('37673-6', '37977-4', '38229-4', 'HORIZON'))
-
-
-# Ensure Processing is ordered as Raw first (if raw data exists)
-if (length(raw_files) > 0) {
-  plot_df$Processing <- factor(plot_df$Processing, levels = c("Raw", "Consensus"))
-} else {
-  plot_df$Processing <- factor(plot_df$Processing, levels = c("Consensus", "Raw"))
-}
-
-
-#plot_df <- plot_df %>%
-#  mutate(Sample_ID = factor(Sample_ID, levels = c("Sample 1", "Sample 2", "Sample 3", "Horizon Control")))
-
-# Calculate median coverage for each Sample_ID and Processing combination
+# Calculate median coverage for each Sample_ID
 median_order <- plot_df %>%
-  group_by(Sample_ID, Processing) %>%
+  group_by(Sample_ID) %>%
   summarise(median_coverage = median(COVERAGE, na.rm = TRUE)) %>%
   arrange(median_coverage) %>%
   pull(Sample_ID) %>%
@@ -118,17 +82,13 @@ plot_df <- plot_df %>%
 
 boxplot <- plot_df %>%
   filter(!is.na(Batch_Label) & Batch_Label != "") %>%
-  ggplot(aes(x = factor(Sample_ID), y = COVERAGE, fill = Processing)) +
-  geom_boxplot(width = 0.4, position = position_dodge(width = 0.6), outlier.shape = NA) +
+  ggplot(aes(x = factor(Sample_ID), y = COVERAGE)) +
+  geom_boxplot(width = 0.4, outlier.shape = NA) +
   theme_minimal() +
   scale_y_continuous(
     limits = c(0, 2000),
     breaks = scales::pretty_breaks(n = 10),
     sec.axis = dup_axis(name = NULL)
-  ) +
-  scale_fill_manual(
-    values = c("Consensus" = "#e4980f"),
-    labels = c("Consensus reads")
   ) +
   labs(y = "Depth of Coverage") +
   theme(
@@ -138,9 +98,7 @@ boxplot <- plot_df %>%
     axis.title.y = element_text(size = 16),
     panel.spacing.x = unit(1, "lines"),
     panel.grid.major.y = element_line(color = "gray", linetype = "dotted"),
-    legend.position = "bottom",
-    legend.title = element_blank(),
-    legend.text = element_text(size = 14),
+    legend.position = "none",
     # Remove the box and fully display labels
     strip.text.x = element_text(
       size = 10,
@@ -174,28 +132,3 @@ ggsave(
   units = "in",
   dpi = 300       # publication-quality resolution
 )
-
-# Create a violin plot
-violin_plot <- ggplot(plot_df, aes(x = Sample_ID, y = COVERAGE, fill = Processing)) +
-  geom_violin(width = 0.8, position = position_dodge(width = 0.8), trim = FALSE) +
-  geom_boxplot(width = 0.2, position = position_dodge(width = 0.8), outlier.shape = NA, alpha = 0.6) +
-  theme_minimal() +
-  scale_y_continuous(limits = c(0, 4000), breaks = scales::pretty_breaks(n = 10)) +
-  scale_fill_manual(values = c("Raw" = "#4472c4", "Consensus" = "#e4980f"),
-                    labels = c("Raw mapped reads", "Consensus reads")) +
-  labs(y = "Depth of Coverage") + # No x-axis label or legend title
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
-    axis.text.y = element_text(size = 14),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(size = 16),
-    panel.spacing.x = unit(1, "lines"),
-    panel.grid.major.y = element_line(color = "gray", linetype = "dotted"),
-    plot.background = element_rect(color = "#4472c4", fill = NA, linewidth = 1.5),
-    legend.position = "right", # Move the legend to the right
-    legend.title = element_blank(), # Remove legend title
-    legend.text = element_text(size = 14) # Increase font size for legend labels
-  )
-
-# Print the violin plot
-print(violin_plot)

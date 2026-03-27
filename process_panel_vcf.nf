@@ -84,9 +84,10 @@ process Pre_Filter_Variants {
 }
 
 process VEP {
-    container = 'quay.io/biocontainers/ensembl-vep:115.2--pl5321h2a3209d_1'
 
-    tag "${ID} ${GROUP}"
+	tag "${ID} ${GROUP}"
+
+    container = 'quay.io/biocontainers/ensembl-vep:115.2--pl5321h2a3209d_1'
 
 	cpus = 1
 	memory = { 1 * task.attempt + ' GB' }
@@ -113,13 +114,12 @@ process VEP {
 process CADD_Run_Container {
 	tag "${ID} ${GROUP}"
 
+	container 'oras://docker.io/joshreid1/cadd-scoring:v1.6_edit'
+	containerOptions '-B /vast/projects/bahlo_epilepsy/somatic_annotation_data/CADD-scripts/data/annotations:/CADD-scripts/data/annotations --writable-tmpfs'
+
 	cpus = 1
 	memory = { 10 * task.attempt + ' GB' }
 	time = { 1 * task.attempt + ' h'}
-
-	container 'oras://docker.io/joshreid1/cadd-scoring:v1.6_edit'
-
-	containerOptions '-B /vast/projects/bahlo_epilepsy/somatic_annotation_data/CADD-scripts/data/annotations:/CADD-scripts/data/annotations --writable-tmpfs'
 		
 	input:
 		path (vcf)
@@ -151,11 +151,11 @@ process CADD_Run_Container {
 process Process_CADD {
 	tag "${ID} ${GROUP}"
 
+    container 'community.wave.seqera.io/library/htslib_vcfanno:8044b99f5458cd69'
+
 	cpus = 1
 	memory = { 10 * task.attempt + ' GB' }
 	time = { 1 * task.attempt + ' h'}
-
-    container 'community.wave.seqera.io/library/htslib_vcfanno:8044b99f5458cd69'
 
 	input:
 		path(vcf)
@@ -227,12 +227,11 @@ process Cosmic {
 process SpliceAI_Run {
 	tag "${ID} ${GROUP}"	
 
+	container 'community.wave.seqera.io/library/python_pip_keras_setuptools_pruned:1c71801b2a7b49db'
+
 	cpus = 1
 	memory = { 16 * task.attempt + ' GB' }
 	time = { 2 * task.attempt + ' h'}
-
-	container 'community.wave.seqera.io/library/python_pip_keras_setuptools_pruned:1c71801b2a7b49db'
-
 
 	input:
 		path(vcf)
@@ -280,8 +279,6 @@ process Process_SpliceAI {
 process Filter_Variants_Vembrane {
 	
     tag "${ID} ${GROUP}"
-    
-    label 'vembrane'
 
     container 'quay.io/biocontainers/vembrane:2.5.0--pyhdfd78af_0'
     
@@ -400,9 +397,11 @@ process Filter_Variants_VAF {
 }
 
 process Generate_Report {
-	publishDir "updated_results", mode: "copy"
+	publishDir "filtered_variants", mode: "copy"
 
 	memory = '32 GB'
+
+	container 'community.wave.seqera.io/library/r-dplyr_r-openxlsx_zip:04bb05dca48c0236'
 
 	input:
 	path rds_files
@@ -420,18 +419,35 @@ process Check_Coverage {
 	cpus = 2
 	memory = '4 GB'
 
-	publishDir 'coverage_data', mode: 'copy', pattern: "*.bed"
-
 	input: tuple val(GROUP), val(ID), val(VCF), val(BAM)
 
-	output: tuple val(GROUP), val(ID), val(VCF), val(BAM)
-			path ("*.gene-list.per-base.bed")
+	output: tuple val(GROUP), val(ID), val(VCF), val(BAM), emit: meta
+			path ("*.gene-list.per-base.bed"), emit: bed
 
 	tag "${ID} ${GROUP} coverage"
 
 	script:
 	"""
 	python ${projectDir}/pipeline_files/scripts/check_coverage.py --bam ${BAM} --bed ${params.bed_file} --output ${ID}.${GROUP}.gene-list.per-base.bed
+	"""
+}
+
+process Plot_Depths {
+	cpus = 2
+	memory = '4 GB'
+
+	publishDir "coverage_data", mode: 'copy'
+
+	input:
+	file bed_files
+
+	output:
+	path "*.png"
+	path "coverage_summary.tsv"
+
+	script:
+	"""
+	Rscript ${projectDir}/pipeline_files/scripts/plot_panel_depths.R .
 	"""
 }
 
@@ -443,7 +459,7 @@ workflow {
         .view { "${it[0]}: ${it[1]}" }
         .set { sampleChannel }
 
-	// Process the sample channel
+	// Variant annotation and filtering
 	gnomad(sampleChannel)
 	| Pre_Filter_Variants
 	| VEP
@@ -457,12 +473,11 @@ workflow {
 	| Compress_Index
 	| Check_Simplex_Duplex_VAF
 	| Filter_Variants_VAF
-
-	Check_Coverage(sampleChannel)
-
-	// Collect all RDS files
 	Filter_Variants_VAF.out.rds.collect().set { all_rds_files }
-
-	// Pass the collected RDS files to Generate_Report
 	Generate_Report(all_rds_files)
+	
+	// Coverage analysis and plotting
+	Check_Coverage(sampleChannel)
+	Plot_Depths(Check_Coverage.out.bed.collect())
+
 }

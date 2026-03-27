@@ -2,7 +2,7 @@
 nextflow.enable.dsl=2
 
 // Input parameters
-params.sample_info			= '/vast/scratch/users/reid.j/duplex_sequencing_workflow/mbc002_ids_plus_vcfpath_plus_bam.tsv'
+params.sample_info			= "${projectDir}/pipeline_files/manifest_files/test_sample_info.tsv"
 params.bed_file             = "${projectDir}/pipeline_files/gene_lists/austin_panel_targets.bed"
 params.ref_fasta			= '/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/reference/fasta/Homo_sapiens_assembly38.fasta'
 params.spliceai_distance    = 500
@@ -36,6 +36,8 @@ process gnomad {
 
 	tag "${ID} ${GROUP}"
 
+    container 'quay.io/biocontainers/vcfanno:0.2.6--0'
+
 	cpus = 1
 	memory = { 1 * task.attempt + ' GB' }
 	time = { 1 * task.attempt + ' h'}
@@ -58,9 +60,9 @@ process gnomad {
 
 process Pre_Filter_Variants {
 
-	module 'bcftools/1.20'
-
 	tag "${ID} ${GROUP}"
+
+    container 'quay.io/biocontainers/bcftools:1.21--h3a4d415_1'
 
 	cpus = 1
 	memory = { 1 * task.attempt + ' GB' }
@@ -117,7 +119,7 @@ process CADD_Run_Container {
 
 	container 'oras://docker.io/joshreid1/cadd-scoring:v1.6_edit'
 
-	containerOptions '-B /stornext/Bioinf/data/lab_bahlo/users/reid.j/cadd/CADD-scripts-master/data/annotations:/CADD-scripts/data/annotations --writable-tmpfs'
+	containerOptions '-B /vast/projects/bahlo_epilepsy/somatic_annotation_data/CADD-scripts/data/annotations:/CADD-scripts/data/annotations --writable-tmpfs'
 		
 	input:
 		path (vcf)
@@ -152,7 +154,9 @@ process Process_CADD {
 	cpus = 1
 	memory = { 10 * task.attempt + ' GB' }
 	time = { 1 * task.attempt + ' h'}
-		
+
+    container 'community.wave.seqera.io/library/htslib_vcfanno:8044b99f5458cd69'
+
 	input:
 		path(vcf)
 		path(cadd_tsv) 
@@ -183,41 +187,40 @@ process Process_CADD {
 }
  
 process ClinVar {
-	tag "${ID} ${GROUP}"	
+	tag "${ID} ${GROUP}"
+
+    container 'quay.io/biocontainers/vcfanno:0.2.6--0'	
 
 	input:
 		tuple path(vcf), path(vcf_index)
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
 				
 	output:
-		tuple path("*.clinvar.vcf.gz"), path("*.clinvar.vcf.gz.tbi")
+		path("*.clinvar.vcf")
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
 
 	shell:
 	'''
 	vcfanno  !{params.clinvar_toml} !{vcf} > !{ID}_!{GROUP}.clinvar.vcf
-	bgzip !{ID}_!{GROUP}.clinvar.vcf
-	tabix !{ID}_!{GROUP}.clinvar.vcf.gz
 	'''
 }
 
 process Cosmic {
-	tag "${ID} ${GROUP}"	
+	tag "${ID} ${GROUP}"
+
+    container 'quay.io/biocontainers/vcfanno:0.2.6--0'		
 
 	input:
-		tuple path(vcf), path(vcf_index)
+		path(vcf)
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
 				
 	output:
-		tuple path("*.cosmic.vcf.gz"), path("*.cosmic.vcf.gz.tbi")
+		path("*.cosmic.vcf")
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
 
 	shell:
 	'''
 	vcfanno  !{params.cosmic_toml} !{vcf} > !{ID}_!{GROUP}.cosmic.vcf
-
-	bgzip !{ID}_!{GROUP}.cosmic.vcf
-	tabix !{ID}_!{GROUP}.cosmic.vcf.gz
 	'''
 }
 
@@ -232,7 +235,7 @@ process SpliceAI_Run {
 
 
 	input:
-		tuple path(vcf), path(vcf_index)
+		path(vcf)
 		tuple val(GROUP), val(ID), val(VCF), val(BAM)
 
 	output:
@@ -252,6 +255,8 @@ process SpliceAI_Run {
 
 process Process_SpliceAI {
 	tag "${ID} ${GROUP}"
+
+    container 'quay.io/biocontainers/vcfanno:0.2.6--0'
 
 	cpus = 1
 	memory = { 2 * task.attempt + ' GB' }

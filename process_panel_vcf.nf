@@ -434,7 +434,7 @@ process Check_Coverage {
 
 process Plot_Depths {
 	cpus = 2
-	memory = '4 GB'
+	memory = { 10 * task.attempt + ' GB' }
 
 	publishDir "coverage_data", mode: 'copy'
 
@@ -451,13 +451,37 @@ process Plot_Depths {
 	"""
 }
 
+
 workflow {
-    Channel
+    samples_ch = Channel
         .fromPath(params.sample_info)
         .splitCsv(header: true, sep: "\t")
-        .map { row -> [row.Group, row.Sample_ID, row.VCF_Filepath, row.BAM_Filepath] }
-        .view { "${it[0]}: ${it[1]}" }
-        .set { sampleChannel }
+        .map { row ->
+            [
+                Group        : row.Group,
+                Sample_ID    : row.Sample_ID,
+                VCF_Filepath : row.VCF_Filepath,
+                BAM_Filepath : row.BAM_Filepath
+            ]
+        }
+
+    samples_ch
+        .collect()
+        .view { rows ->
+            def total = rows.size()
+            def groupCounts = rows.countBy { it.Group }
+
+            def summary = groupCounts
+                .collect { group, n -> "${n} ${group} samples" }
+                .join(', ')
+
+            """Processing ${total} samples
+${summary}"""
+        }
+
+    sampleChannel = samples_ch.map { row ->
+        tuple(row.Group, row.Sample_ID, row.VCF_Filepath, row.BAM_Filepath)
+    }
 
 	// Variant annotation and filtering
 	gnomad(sampleChannel)

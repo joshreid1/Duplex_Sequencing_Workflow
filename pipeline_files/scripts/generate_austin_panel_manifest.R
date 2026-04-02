@@ -1,13 +1,33 @@
 #!/usr/bin/env Rscript
 
 # Define file paths
-input_file  <- "/vast/scratch/users/reid.j/duplex_sequencing_workflow/mbc002_ids.tsv"
-output_file <- "/vast/scratch/users/reid.j/duplex_sequencing_workflow/mbc002_ids_plus_vcfpath_plus_bam.tsv"
-search_dir  <- "/vast/scratch/users/reid.j/austin_panel"
+input_file  <- "/vast/projects/reidj-project/Duplex_Sequencing_Workflow/pipeline_files/manifest_files/mtle_mnd_control_manifest_260331.tsv"
+output_file <- "/vast/projects/reidj-project/Duplex_Sequencing_Workflow/pipeline_files/manifest_files/mtle_mnd_control_manifest_plus_filepaths_260331.tsv"
+search_dir  <- "/stornext/Bioinf/data/lab_bahlo/projects/epilepsy/hg38/cohorts/austin_panel/"
 
-# Read the input TSV file — no header, two columns
+# Read the input TSV file — header required: Group, Sample_ID, Batch
 cat("Reading input file:", input_file, "\n")
-sample_data <- read.delim(input_file, header = FALSE, stringsAsFactors = FALSE, col.names = c("Sample_ID", "Group"))
+sample_data <- read.delim(
+  input_file,
+  header = TRUE,
+  stringsAsFactors = FALSE,
+  sep = "\t",
+  check.names = FALSE
+)
+
+# Validate required columns
+required_cols <- c("Group", "Sample_ID", "Batch")
+missing_cols <- setdiff(required_cols, colnames(sample_data))
+if (length(missing_cols) > 0) {
+  stop(
+    "Input file is missing required columns: ",
+    paste(missing_cols, collapse = ", "),
+    "\nExpected header: Group\\tSample_ID\\tBatch"
+  )
+}
+
+# Keep only the expected columns in the desired order
+sample_data <- sample_data[, required_cols]
 
 cat("Samples found:", nrow(sample_data), "\n")
 print(sample_data)
@@ -38,22 +58,24 @@ get_user_choice <- function(prompt_msg, max_choice) {
 }
 
 # Iterate over each row
-for (i in 1:nrow(sample_data)) {
+for (i in seq_len(nrow(sample_data))) {
   sample_id <- sample_data$Sample_ID[i]
   group     <- sample_data$Group[i]
+  batch     <- sample_data$Batch[i]
 
   cat("\n----------------------------------------\n")
   cat("Processing row", i, "of", nrow(sample_data), "\n")
   cat("Sample ID:", sample_id, "\n")
   cat("Group:", group, "\n")
+  cat("Batch:", batch, "\n")
 
   if (is.na(sample_id) || nchar(trimws(sample_id)) == 0) {
     cat("WARNING: Empty sample ID at row", i, "- skipping\n")
     next
   }
 
-  # Search for matching VCF files using full sample ID (e.g. "51146-2")
-  vcf_pattern    <- paste0("^", sample_id, ".*\\.hard-filtered\\.vcf\\.gz$")
+  # Search for matching VCF files using full sample ID
+  vcf_pattern <- paste0("^", sample_id, ".*\\.hard-filtered\\.vcf\\.gz$")
   matching_files <- list.files(
     path       = search_dir,
     pattern    = vcf_pattern,
@@ -69,7 +91,9 @@ for (i in 1:nrow(sample_data)) {
     sample_data$VCF_Filepath[i] <- matching_files
   } else {
     cat("Found", length(matching_files), "matching VCF files:\n")
-    for (j in seq_along(matching_files)) cat("  [", j, "] ", matching_files[j], "\n", sep = "")
+    for (j in seq_along(matching_files)) {
+      cat("  [", j, "] ", matching_files[j], "\n", sep = "")
+    }
     idx <- get_user_choice(
       paste0("Select VCF file for ", sample_id, " (1-", length(matching_files), "): "),
       length(matching_files)
@@ -80,10 +104,10 @@ for (i in 1:nrow(sample_data)) {
 
   # Search for BAM in the same directory as the selected VCF
   if (!is.na(sample_data$VCF_Filepath[i])) {
-    vcf_dir       <- dirname(sample_data$VCF_Filepath[i])
+    vcf_dir <- dirname(sample_data$VCF_Filepath[i])
     cat("\nSearching for BAM file in:", vcf_dir, "\n")
 
-    bam_pattern   <- paste0("^", sample_id, ".*\\.bam$")
+    bam_pattern <- paste0("^", sample_id, ".*\\.bam$")
     matching_bams <- list.files(
       path       = vcf_dir,
       pattern    = bam_pattern,
@@ -98,7 +122,9 @@ for (i in 1:nrow(sample_data)) {
       sample_data$BAM_Filepath[i] <- matching_bams
     } else {
       cat("Found", length(matching_bams), "matching BAM files:\n")
-      for (j in seq_along(matching_bams)) cat("  [", j, "] ", matching_bams[j], "\n", sep = "")
+      for (j in seq_along(matching_bams)) {
+        cat("  [", j, "] ", matching_bams[j], "\n", sep = "")
+      }
       idx <- get_user_choice(
         paste0("Select BAM file for ", sample_id, " (1-", length(matching_bams), "): "),
         length(matching_bams)
@@ -115,8 +141,8 @@ cat("Processing complete!\n")
 cat("Total samples processed:", nrow(sample_data), "\n")
 cat("VCF files found:        ", sum(!is.na(sample_data$VCF_Filepath)), "\n")
 cat("BAM files found:        ", sum(!is.na(sample_data$BAM_Filepath)), "\n")
-cat("VCF files not found:    ", sum(is.na(sample_data$VCF_Filepath)),  "\n")
-cat("BAM files not found:    ", sum(is.na(sample_data$BAM_Filepath)),  "\n")
+cat("VCF files not found:    ", sum(is.na(sample_data$VCF_Filepath)), "\n")
+cat("BAM files not found:    ", sum(is.na(sample_data$BAM_Filepath)), "\n")
 
 # Write output
 cat("\nWriting output to:", output_file, "\n")
